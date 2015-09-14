@@ -1,15 +1,29 @@
 
+import numpy  as np
 
-import numpy 
-__all__ = ['findEvents','get_normed_traces_allTrials','open_folder','get_normed_traces','get_ransac_npil_coefs', 'fitRansac', 'reshape_by_odor', 'parseOdorsAllTrials','parseOdors','getFramePeriod','find_nearest', 'local_neighcorr']
+__all__ = ['get_keys','gen_dict_extract', 'findEventsParallel', 'findEvents','get_normed_traces_allTrials','open_folder','get_normed_traces','get_ransac_npil_coefs', 'fitRansac', 'reshape_by_odor', 'parseOdorsAllTrials','parseOdors','getFramePeriod','find_nearest', 'local_neighcorr']
 
-def open_folder(path):
-    import subprocess
-    subprocess.call(["open", "-R", path])
+
+
+def findEventsParallel(traces, stds, std_threshold_pos=2.0, std_threshold_neg = 1.6, minimum_length=10, njobs=8):
+    from joblib import Parallel, delayed
+    import numpy as np
+    frames, cells, trials = traces.shape    
+    
+        
+    events = Parallel(n_jobs=njobs)(delayed(findEvents)(traces[:,cell,:], stds[cell,:], 
+        std_threshold_pos, std_threshold_neg, minimum_length) for cell in range(cells))
+
+
+    pos_list = [events[cell]['pos_events'] for cell in range(cells)]
+    neg_list = [events[cell]['neg_events'] for cell in range(cells)]
+
+    return dict([('pos_events', np.swapaxes(np.dstack(pos_list), 2,1)),('neg_events', np.swapaxes(np.dstack(neg_list), 2,1))])
+    
 
 def findEvents(traces, stds, std_threshold_pos=2.0, std_threshold_neg = 1.6, minimum_length=10):
     import mahotas
-    #import numpy
+    
     """Core event finding routine with flexible syntax.
 
 
@@ -68,19 +82,31 @@ def get_normed_traces_allTrials(raw_rois,npils,npil_coefs,njobs,numTrials,subtra
     import numpy as np
     
 
-    out = [get_normed_traces(raw_rois[...,trial], npils[...,trial], npil_coefs[...,trial],8, subtracted=subtracted) for trial in range(numTrials)]
-    return np.swapaxes(np.asarray([out[trial]['corrected_rois'] for trial in range(numTrials)]).T,0,1)
+    out = [get_normed_traces(raw_rois[...,trial], npils[...,trial], npil_coefs[...,trial],8, subtracted=subtracted) for trial in range(numTrials)] #list of dicts containing traces and stds
+    return {'corrected_rois': np.swapaxes(np.asarray([out[trial]['corrected_rois'] for trial in range(numTrials)]).T,0,1),
+            'normed_stds':np.asarray([out[trial]['normed_stds'] for trial in range(numTrials)]).T}
 
 def get_normed_traces(rois, npils, coefs, njobs,subtracted):
+    
     import sys
     import numpy as np
     from joblib import Parallel, delayed
     import cPickle as pickle
     from time import time
+    
     """
     this function is designed for trial by trial runs.
+    args: 
+        rois, npils: [frames x cells] arrays for a field of view. 
+        coefs: [cells] array; refers to output of get_ransac_npil_coefs
+        njobs: specifies number of cores. 
+        subtracted: if True, implements neuropil subtraction. 
+
+    returns: 
+    out = {'corrected_rois': corrected_rois,
+        'normed_means': normed_means,
+        'normed_stds': normed_stds}
     """
-    
     
     #for every raw cell signal in this trial fit with gaussian mixture model. to get baseline estimate
     raw_cell_gmmOut = Parallel(n_jobs=njobs)(delayed(fitGaussianMixture1D_raw)(rois[:,cell]) for cell in range(rois.shape[1]))
@@ -118,7 +144,6 @@ def get_normed_traces(rois, npils, coefs, njobs,subtracted):
                 'npils_means': npils_means}
 
     out = {'corrected_rois': corrected_rois,
-        'normed_means': normed_means,
         'normed_stds': normed_stds}
     return out
 
@@ -488,22 +513,24 @@ def local_neighcorr(data, mask, corr_thresh, neigh_size, cell):
 
 ###################################_Npil_Utils_##############################################################
 
-def get_ransac_npil_coefs(npils,raw_rois,cell,trial, njobs=8):
+def get_ransac_npil_coefs(npils,raw_rois, njobs=8):
     
     from joblib import Parallel, delayed
     from time import time
     import cPickle as pickle
     
-    npils = pickle.load(open(npils))
-    raw_rois = pickle.load(open(npils))
-    
+    npils = npils
+    raw_rois = raw_rois
+    frames,cells,trials = raw_rois.shape
     cells_by_trial_list = []
+    
     
     for trial in range(trials):
         
         tic = time()
         all_cells = Parallel(n_jobs = njobs)(delayed(fitRansac)(npils, raw_rois, cell = cell, trial = trial) for cell in range(cells))
         cells_by_trial_list.append(all_cells)
+
         print time()-tic
     return np.vstack(np.dstack(cells_by_trial_list))
 
@@ -513,8 +540,9 @@ def fitRansac(npils,raw_rois,cell,trial,min_samples = .10):
     from sklearn import linear_model
     import cPickle as pickle
     
-    npils = pickle.load(open(npils))
-    raw_rois = pickle.load(open(npils))
+    npils = npils
+    raw_rois = raw_rois
+    
     
     frames,cells,trials = raw_rois.shape
     model_ransac = linear_model.RANSACRegressor(linear_model.LinearRegression(), max_trials = 10000, min_samples = min_samples)
@@ -524,3 +552,32 @@ def fitRansac(npils,raw_rois,cell,trial,min_samples = .10):
     
     
     return model_ransac.estimator_.coef_[0][0]
+
+###################################_Query_Utils_##############################################################
+
+def gen_dict_extract(key, var):
+    """
+    returns value(s) of passed key regardless of where it is nested
+    """
+    if hasattr(var,'iteritems'):
+        for k, v in var.iteritems():
+            if k == key:
+                yield v
+            if isinstance(v, dict):
+                for result in gen_dict_extract(key, v):
+                    yield result
+            elif isinstance(v, list):
+                for d in v:
+                    for result in gen_dict_extract(key, d):
+                        yield result
+
+def get_keys(dl, keys_list):
+    if isinstance(dl, dict):
+        keys_list += dl.keys()
+        map(lambda x: get_keys(x, keys_list), dl.values())
+    elif isinstance(dl, list):
+        map(lambda x: get_keys(x, keys_list), dl)    
+
+def open_folder(path):
+    import subprocess
+    subprocess.call(["open", "-R", path])                   

@@ -1,15 +1,15 @@
 
 
-
-__all__ = ['shiftedColorMap', 'choose_color']
-
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import AxesGrid
 import seaborn as sns
 
-def choose_color():
+
+__all__ = ['shiftedColorMap', 'choose_color']
+
+def choose_color(as_cmap=True):
      import seaborn as sns
      out = sns.choose_diverging_palette(as_cmap=True)
      return out
