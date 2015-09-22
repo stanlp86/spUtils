@@ -277,3 +277,128 @@ def get_normed_traces_byTrial(rois, npils, coefs, window, SD_window, SD_percenti
         'normed_stds': normed_stds}
     return out
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+findEventsParams = {'event_start_thresh': 0.5, 'std_threshold_neg': 2.25, 'minimum_length': 10, 'std_threshold_pos': 2.25, 'percentile_above_std': 80}
+
+
+
+#designed to work with: 
+#traces = normed_trace.copy()[:,np.newaxis]
+
+def findEvents(trace, std, std_threshold_pos=1.5, std_threshold_neg = 1.5, percentile_above_std = 80, minimum_length=10, event_start_thresh = 0.0, positive=True):
+    import mahotas
+    import scipy as sp
+    
+    
+    """ Modified from d_code events module by AJG
+        Core event finding routine with flexible syntax.
+    
+    An event begins and ends at 1std from baseline and is at least 1 second long. 
+    Each event's maximum is above 2std from baseline 
+    
+    :param: traces - 1d array
+    :param: std - float
+    :param: std_threshold - multiple of per-cell STD to use for an event (float)
+
+    :param: minimum_length - minimum length of an event
+    :param: alpha - optional scaling parameter for adjusting thresholds
+    :event_start_thresh - where to start and end event in units of sigma from baseline.
+    :returns: numpy array same shape and size of traces, with each event given a unique integer label. returns one for pos, 1 for neg. 
+    
+    """
+
+    trace = trace
+    std = std
+   # if traces.ndim == 2:
+     #   traces = np.atleast_3d(traces) # time x cells x trials
+     #  
+        #stds = np.atleast_2d(stds).T # cells x trials
+    #time, cells, trials = traces.shape
+   # print time, cells, trials, stds.shape
+    pos_events = np.zeros_like(trace)
+    neg_events = np.zeros_like(trace)
+
+    event_cutoff_pos = std * float(std_threshold_pos)
+    event_cutoff_neg = std * float(std_threshold_neg)*(-1)
+    event_start_thresh = event_start_thresh #in sigma
+    # detect  events
+    
+    if positive:
+        
+        #first find where trace deviates above /belowevent_start_thresh
+        pos_events = trace > std*event_start_thresh # here we assume the mean is at 0.0 since we've already baselined. 
+        # filter for minimum length
+        pos_events = mahotas.label(pos_events, np.array([1,1]))[0]
+        
+        for single_event in range(1, pos_events.max()+1): 
+
+            if (pos_events == single_event).sum() <= minimum_length:
+                pos_events[pos_events == single_event] = 0
+        pos_events = pos_events>0
+        
+        #filter for actual event cutoff
+        pos_events = mahotas.label(pos_events, np.array([1,1]))[0]
+        
+        #return pos_events
+        for single_event in range(1, pos_events.max()+1):
+
+            idx = np.argwhere(pos_events==single_event)  
+            #return trace[idx[:,0]]
+            if sp.stats.scoreatpercentile(trace[idx[:,0]],percentile_above_std) <= event_cutoff_pos:
+
+                pos_events[pos_events == single_event] = 0
+        pos_events = pos_events>0
+        
+        #label and return
+        pos_events = mahotas.label(pos_events, np.array([1,1]))[0]
+        return pos_events
+    else:
+        
+        neg_events = trace < (-1.0)*std *event_start_thresh
+        neg_events = mahotas.label(neg_events, np.array([1,1]))[0]
+        
+        for single_event in range(1, neg_events.max()+1):
+            if (neg_events == single_event).sum() <= minimum_length:
+                neg_events[neg_events == single_event] = 0
+        neg_events = neg_events>0
+        
+   
+        neg_events = mahotas.label(neg_events, np.array([1,1]))[0]
+        
+        for single_event in range(1, neg_events.max()+1):
+            idx = np.argwhere(neg_events==single_event)        
+            if sp.stats.scoreatpercentile(trace[idx[:,0]],percentile_above_std) >= event_cutoff_neg:
+                neg_events[neg_events == single_event] = 0
+        neg_events = neg_events>0
+        
+        neg_events = mahotas.label(neg_events, np.array([1,1]))[0]
+
+        return neg_events
+
+
+def epoch_event_generator(traces, stds, cells, trials, **findEventsParams):
+    
+    
+    return np.dstack([trial for trial in trial_event_generator(traces, stds, cells, trials, **findEventsParams)])
+    
+def trial_event_generator(traces, stds, cells, trials, **findEventsParams):
+    for trial in range(trials):
+        yield np.swapaxes(np.dstack([findEvents(traces[:,cell,trial], stds[cell,trial], **findEventsParams)
+                 for cell in range(cells)]).T,1,0)
