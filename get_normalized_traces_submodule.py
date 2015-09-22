@@ -402,3 +402,25 @@ def trial_event_generator(traces, stds, cells, trials, **findEventsParams):
     for trial in range(trials):
         yield np.swapaxes(np.dstack([findEvents(traces[:,cell,trial], stds[cell,trial], **findEventsParams)
                  for cell in range(cells)]).T,1,0)
+
+
+def getMaxEvents(event_array, trace_array):
+    frames, cells, trials = trace_array.shape
+    """This routine takes an event array and corresponding trace array
+    and replaces the event labels with the average amplitude of the
+    event.
+
+    :param: event_array - 2 or 3d numpy event array (time x cells, or time x cells x trials)
+    :param: trace_array - 2 or 3d numpy event array (time x cells, or time x cells x trials)
+    :returns: 2d numpy array same shape and size of event_array, zero where there
+              weren't events, and the average event amplitude for the event otherwise.
+    """
+    weighted_events = np.zeros_like(event_array, dtype=float)
+    for trial in range(trials):
+        for cell in range(cells):
+        
+            for i in np.unique(event_array[:,cell,trial])[1:]:
+                #print i
+                weighted_events[:,cell,trial][event_array[:,cell,trial]==i] = trace_array[:,cell,trial][event_array[:,cell,trial]==i].max()
+                #print trace_array[:,cell,trial][event_array[:,cell,trial]==i].max()
+    return weighted_events
