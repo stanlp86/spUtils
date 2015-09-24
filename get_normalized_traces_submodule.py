@@ -33,14 +33,23 @@ def get_first_baseline_oneTrace(trace, window, Fluor_percentile):
     from scipy.stats import scoreatpercentile as score
     """
     params: trace - 1d array of shape [frames]
-            window - width of sliding window in frames corresponding to secPerFrame*window seconds. 
-            Fluor_percentile - percentile of fluorescence distribution at which to calculate score.   
+    window - width of sliding window in frames corresponding to secPerFrame*window seconds.
+    Fluor_percentile - percentile of fluorescence distribution at which to calculate score.
     """
     win = window/2
-    
+
     baseline = np.array([score(trace[s-win:s+win], Fluor_percentile) for s in range(win,(trace.shape[0]-win))])
+    #now pad baseline with first and last value of baseline; win samples wide on each end. 
     baselined_trace = trace[win:-win]-baseline
     
+    a = np.zeros(win)
+    pad = np.hstack((a, baseline, a))
+    pad[:win] = pad[win+5]
+    pad[-win:] = pad[-win-5]
+    baseline = pad
+    #now subtract padded baseline from trace. 
+    baselined_trace = trace-baseline
+
     return baseline, baselined_trace
 
 
@@ -125,6 +134,7 @@ def normalize_allTraces(baselined_traces, first_baselines, second_baselines, rol
         
     normalized_trace_and_sd = Parallel(n_jobs=njobs)(delayed(normalize_oneTrace)(baselined_traces[:,cell], first_baselines[:,cell], second_baselines[cell], rolling_SDS[cell], SD_idx_array_list[cell], SD_window) for cell in range(baselined_traces.shape[1]))
     return normalized_trace_and_sd
+
 
 def normalize_oneTrace(trace, first_baseline, second_baseline, rolling_SD, idx, SD_window = 20):
     from scipy.stats import scoreatpercentile as score
