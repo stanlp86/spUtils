@@ -1,7 +1,7 @@
 
 import numpy  as np
 
-__all__ = ['get_keys','gen_dict_extract', 'findEventsParallel', 'findEvents','get_normed_traces_allTrials','open_folder','get_normed_traces','get_ransac_npil_coefs', 'fitRansac', 'reshape_by_odor', 'parseOdorsAllTrials','parseOdors','getFramePeriod','find_nearest', 'local_neighcorr']
+__all__ = ['get_channel', 'get_keys','gen_dict_extract', 'findEventsParallel', 'findEvents','get_normed_traces_allTrials','open_folder','get_normed_traces','get_ransac_npil_coefs', 'fitRansac', 'reshape_by_odor', 'parseOdorsAllTrials','parseOdors','getFramePeriod','find_nearest', 'local_neighcorr']
 
 
 
@@ -359,6 +359,23 @@ def getFramePeriod(raw_tif):
 
     return secPerFrame
 
+def get_channel(fname, channel, offset = True):
+    import tifffile
+    if offset == True:
+        with tifffile.TiffFile(fname) as tif:
+            data = tif.asarray()[channel::2,...] # extract channel
+            metadata = tif[0].tags['image_description'].value.split('\n')
+            offset = [int(item) for item in metadata[35].split('[')[1].split() if item.isdigit()][channel]
+            data += offset
+            num_frames = data.shape[0]
+        return (data, metadata, num_frames)
+    else:
+        with tifffile.TiffFile(fname) as tif:
+            data = tif.asarray()[channel::2,...] # extract channel
+            metadata = tif[0].tags['image_description'].value.split('\n')
+            
+            num_frames = data.shape[0]
+            return (data, metadata, num_frames)
 
 
 
