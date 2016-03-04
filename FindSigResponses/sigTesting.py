@@ -1,7 +1,7 @@
 #wrapper. Pass in dict containing corrected_traces, and associated key 
 
 
-__all__ = ['getResponders','func', 'testSignificance']
+__all__ = ['getResponders','func', 'testSignificance', 'getcellsBasic']
 
 import numpy  as np
 from spUtils import gen_dict_extract
@@ -104,7 +104,7 @@ def getResponders(traceDict, traceKey, trials, test_kind = 'basic', window =10, 
     
     output = defaultdict(dict)
 
-    for odor, cell, trial_list in sigTestWrapper(traces, numOdors, cells, trials, test_kind, window, bootstrap): 
+    for odor, cell, trial_list in sigTestWrapper(traceDict, traces, numOdors, cells, trials, test_kind, window, bootstrap): 
         output[odor][cell] = trial_list
         
     return output 
@@ -159,18 +159,16 @@ def getcellsBasic_sp050515a(traces, odor, cell, numTrials, window):
 
 
 
-
-def getcellsBasic(traces, odor, cell, numTrials, window):
+def getcellsBasic(traceDict,traces, odor, cell, numTrials, window):
         import numpy as np
         "this is the basic sig_test"
         high_thresh = 1.5
         low_thresh = 1.5
         
         odor_info = gen_dict_extract('odor_info', traceDict).next()
-     
+        
         for trial in range(numTrials):
             
-            entire_interval = odor_info[trial]['pre_odor_post_interval'][odor+1]
             on = odor_info[trial]['on'][odor+1]
             
             
@@ -191,12 +189,14 @@ def getcellsBasic(traces, odor, cell, numTrials, window):
             #condition
            
             if post.mean()>high:
-                yield post.mean()-pre.mean()
+                yield post.mean()-pre.mean(),trial
             elif post.mean()<low:
-                yield post.mean()-pre.mean()
+                yield post.mean()-pre.mean(),trial
 
 
-def sigTestWrapper(traces, numOdors, cells, numTrials, test_kind, window, bootstrap):
+
+
+def sigTestWrapper(traceDict, traces, numOdors, cells, numTrials, test_kind, window, bootstrap):
     """
     Iterates over each odor-cell pair and invokes sigTest of choice.
     Returns trial list of values for trials which meet condition of sigTest. 
@@ -211,7 +211,7 @@ def sigTestWrapper(traces, numOdors, cells, numTrials, test_kind, window, bootst
         for cell in range(cells):
 
             for odor in range(numOdors):
-                trial_list =  [sig_trial for sig_trial in getcellsBasic(traces, odor, cell, numTrials, window)]
+                trial_list =  [sig_trial for sig_trial in getcellsBasic(traceDict, traces, odor, cell, numTrials, window)]
                 yield odor, cell, trial_list
 
     elif test_kind == 'basic_sp050515a':

@@ -90,7 +90,7 @@ def get_second_baseline_oneTrace(trace, SD_window, SD_percentile):
     
     win = SD_window/2
     
-    rolling_SD = np.array([trace[s-win:s+win].std() for s in range(win,(trace.shape[0]-win))])
+    rolling_SD = np.array([trace[s-win:s+win].std() for s in np.arange(win,(trace.shape[0]-win))])
     #Get SD value at 'percentile_val' percentile
     SD = score(rolling_SD, SD_percentile)
     SD = np.round(SD)
@@ -104,16 +104,18 @@ def get_second_baseline_oneTrace(trace, SD_window, SD_percentile):
     
     #get the median of the largest bin of the histogram of the range of trace[idx] values
     #specify bin size: 
-    bins = np.round((idx[:,0].shape[0])/10.0)
-    a,b = np.histogram(np.round(trace[win:-win][idx]), bins = bins)
-    #get the range of trace[idx] values that reside within the largest bin
-    bin_num = np.argwhere(b==b[a==a.max()][0])[0][0]
-    left_edge = b[bin_num]
-    right_edge = b[bin_num+1]
-    
-    #this is the median val...the baseline.
-    second_baseline = score(np.unique(trace[idx].clip(left_edge,right_edge)),50)
-    
+    try:
+        bins = np.round((idx[:,0].shape[0])/10.0)
+        a,b = np.histogram(np.round(trace[win:-win][idx]), bins = bins)
+        #get the range of trace[idx] values that reside within the largest bin
+        bin_num = np.argwhere(b==b[a==a.max()][0])[0][0]
+        left_edge = b[bin_num]
+        right_edge = b[bin_num+1]
+        
+        #this is the median val...the baseline.
+        second_baseline = score(np.unique(trace[idx].clip(left_edge,right_edge)),50)
+    except: 
+        second_baseline = score(np.unique(trace[idx]),50)
     return second_baseline, np.squeeze(idx), rolling_SD
 
     #The Two functions below constitute Step 3 of our baselining routine: correcting long-term changes in baseline
@@ -204,7 +206,9 @@ def get_normed_traces_allTrials(raw_rois, npils, npil_coefs, window=150, SD_wind
     out = [get_normed_traces_byTrial(raw_rois[...,trial], npils[...,trial], npil_coefs[...,trial], window, SD_window, SD_percentile, Fluor_percentile, njobs, method, subtracted) for trial in range(numTrials)] #list of dicts containing traces and stds
     
     return {'corrected_rois': np.swapaxes(np.asarray([out[trial]['corrected_rois'] for trial in range(numTrials)]).T,0,1),
-            'normed_stds':np.asarray([out[trial]['normed_stds'] for trial in range(numTrials)]).T}
+            'normed_stds':np.asarray([out[trial]['normed_stds'] for trial in range(numTrials)]).T,
+            'second_baselines': np.swapaxes(np.asarray([out[trial]['second_baselines'] for trial in range(numTrials)]).T,0,1),
+            'baselined1_traces': np.swapaxes(np.asarray([out[trial]['baselined1_traces'] for trial in range(numTrials)]).T,0,1)}
 
 def get_normed_traces_byTrial(rois, npils, coefs, window, SD_window, SD_percentile, Fluor_percentile, njobs, method, subtracted):
     import sys
@@ -241,7 +245,9 @@ def get_normed_traces_byTrial(rois, npils, coefs, window, SD_window, SD_percenti
         normalized_SDS = np.squeeze(np.vstack([tup[1] for tup in step3]))
 
         out = {'corrected_rois': normalized_traces,
-                'normed_stds': normalized_SDS}
+                'normed_stds': normalized_SDS,
+                'second_baselines': second_baselines,
+                'baselined1_traces': baselined_traces}
         return out
         
     elif method == 1:
@@ -277,15 +283,15 @@ def get_normed_traces_byTrial(rois, npils, coefs, window, SD_window, SD_percenti
         
     
     
-    #these are used for thresholding for events make sure correspond
-    inters = {'rois_normed': rois_normed,
-        'npils_normed': npils_normed,
-            'raw_means': raw_means,
-                'npils_means': npils_means}
+        #these are used for thresholding for events make sure correspond
+        inters = {'rois_normed': rois_normed,
+            'npils_normed': npils_normed,
+                'raw_means': raw_means,
+                    'npils_means': npils_means}
 
-    out = {'corrected_rois': corrected_rois,
-        'normed_stds': normed_stds}
-    return out
+        out = {'corrected_rois': corrected_rois,
+            'normed_stds': normed_stds}
+        return out
 
 
 
