@@ -9,6 +9,9 @@ Ultimately, the goal is to move away from our codebase, and port everything to p
 
 """
 from spUtils import get_normalized_traces_submodule 
+from glob import glob
+import cPickle as pickle
+import re
 import numpy as np
 import pandas as pd
 import graphlab as gl
@@ -74,6 +77,7 @@ def saveDF(directory, epochIDX, current_epoch):
     store.close()
 
 def trialDFs_to_SFrame(directory, saveName = 'experiment'):
+
     files = glob(directory + '*.dat')
     slice0 = gl.SFrame(pickle.load(open(files[0])))
     epoch = int(re.split('tracesDF_e|_0', files[0])[-2])
@@ -92,7 +96,7 @@ def trialDFs_to_SFrame(directory, saveName = 'experiment'):
 
 #Convert odor information from pandas to dict. 
 
-def extractOdorInfo(sframePath):
+def extractOdorInfo(sframePath, epoch):
     def changeTimingReference(x):
         trialstart = x['trialFrame'][0]
         odorstart = x['odorOn'][0]
@@ -100,9 +104,9 @@ def extractOdorInfo(sframePath):
         x['trialOdorOn']=trialstart+odorstart
         x['trialOdorOff'] = trialstart + odorstop
         return x
-
+    sframe = gl.SFrame(sframePath)
     #Filter odor relevant information from master sframe and read into pandas dataframe
-    odorInfo = sframe[sframe['cellID']==0]['odorPos', 'odorID', 'odorOn', 'odorOff', 'trial', 'epoch']
+    odorInfo = sframe[(sframe['epoch']==epoch) & (sframe['cellID']==0)]['odorPos', 'odorID', 'odorOn', 'odorOff', 'trial', 'epoch']
     odorInfo = odorInfo.to_dataframe()
     #get rid of sframe index, reindex by trial and corresponding frames. 
     groups = odorInfo.groupby('trial').apply(lambda x: x.reset_index(drop = True))
@@ -134,7 +138,7 @@ def odorInfo_to_dict(odorInfo, trialID):
     
     num_odors = odorInfo.odorID.max()
     num_trials = odorInfo.trial.max()
-
+    
     parseDict ={}
     #keys:
 
@@ -145,7 +149,7 @@ def odorInfo_to_dict(odorInfo, trialID):
 
     for odor in range(1,num_odors+1):
     #odorPeriod timing
-        fullLength = len(odorInfo.xs((1,1)).trialFrame)
+        fullLength = len(odorInfo.xs((odor,trialID)).trialFrame)
         startFrame = odorInfo.xs((odor,trialID)).trialFrame[0]
         stopFrame = odorInfo.xs((odor,trialID)).trialFrame[fullLength-1]
         interval['pre_odor_post_interval'][odor] = [startFrame, stopFrame]

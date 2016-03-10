@@ -663,7 +663,7 @@ def fitRansac(npils,raw_rois,cell,trial,min_samples = .10):
 
 def xticksInSec(framerate, secInterval, plotLengthInFrames):
     import numpy as np
-    
+    import matplotlib.pylab as plt
     plotLengthInFrames = int(plotLengthInFrames)
     secInterval = int(secInterval)
     xtickframetimes = np.arange(0, plotLengthInFrames, framerate*secInterval)
