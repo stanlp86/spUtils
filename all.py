@@ -700,7 +700,7 @@ def getSNR(traces,maxEvents, cell,trial):
 
     #subtract mean from absolute magnitude of each event to get signal. 
 
-    signal = np.unique(eventMags)[1:]-blineMean
+    signal = np.unique(eventMags)[1:]
     noise = sd
 
     SNR = signal/noise
